@@ -1,0 +1,3 @@
+[submodule "type_tools"]
+	path = type_tools
+	url = git@github.com:jlwoolf/type_tools.git
