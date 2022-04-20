@@ -32,11 +32,31 @@
 
 namespace more_maps
 {
+#ifndef HAS_EMPLACE
+#define HAS_EMPLACE
     GENERATE_HAS_MEMBER_FUNCTION(emplace, emplace)
-    GENERATE_HAS_MEMBER_FUNCTION(find, find)
+#endif
+
+#ifndef HAS_ERASE
+#define HAS_ERASE
     GENERATE_HAS_MEMBER_FUNCTION(erase, erase)
+#endif
+
+#ifndef HAS_FIND
+#define HAS_FIND
+    GENERATE_HAS_MEMBER_FUNCTION(find, find)
+#endif
+
+
+#ifndef HAS_INSERT
+#define HAS_INSERT
     GENERATE_HAS_MEMBER_FUNCTION(insert, insert)
+#endif
+
+#ifndef HAS_OPERATOR_INDEX
+#define HAS_OPERATOR_INDEX
     GENERATE_HAS_MEMBER_FUNCTION(operator[], operator_index)
+#endif
 
     template <
         class V,
@@ -58,10 +78,10 @@ namespace more_maps
         typedef typename map_type::value_type value_type;
 
         static_assert(has_insert_v<map_type, value_type>, "Map container must have insert function");
-        static_assert(has_find_v<map_type, int &&>, "Map container must have find function");
+        static_assert(has_find_v<map_type, int>, "Map container must have find function");
         static_assert(has_erase_v<map_type, iterator>, "Map container must have erase function");
-        static_assert(has_emplace_v<map_type, int &&>, "Map container must have emplace function");
-        static_assert(has_operator_index_v<map_type, int &&>, "Map container must have operator[]");
+        static_assert(has_emplace_v<map_type, int>, "Map container must have emplace function");
+        static_assert(has_operator_index_v<map_type, int>, "Map container must have operator[]");
 
         /**
          * @brief Returns an iterator to the first element of the map.
@@ -125,8 +145,20 @@ namespace more_maps
             return _map.insert(static_cast<const value_type &>(value_type{getTypeId<T>(), value}));
         }
 
+        template <class T, typename = typename std::enable_if_t<std::is_convertible_v<T, V>>>
+        is_detected_t<insert_t, map_type, const value_type &> insert(const T &value)
+        {
+            return _map.insert<V>(static_cast<const V &>(value));
+        }
+
         template <class T>
-        is_detected_t<insert_t, map_type, value_type&&> insert(V &&value)
+        is_detected_t<insert_t, map_type, value_type &&> insert(V &&value)
+        {
+            return _map.insert(value_type{getTypeId<T>(), std::forward<V>(value)});
+        }
+
+        template <class T>
+        is_detected_t<insert_t, map_type, value_type &&> insert(T &&value)
         {
             return _map.insert(value_type{getTypeId<T>(), std::forward<V>(value)});
         }
@@ -143,7 +175,14 @@ namespace more_maps
             return {emplace<TArgs>(std::forward<V>(values))...};
         }
 
-        is_detected_t<erase_t, map_type, iterator> erase(iterator pos) {
+        template <class... TArgs, typename = typename std::enable_if_t<(sizeof...(TArgs) > 1) && std::conjunction_v<std::is_convertible<TArgs, V>...>>>
+        std::array<is_detected_t<insert_t, map_type, value_type &&>, sizeof...(TArgs)> insert(TArgs &&...values)
+        {
+            return {emplace<TArgs>(std::forward<V>(values))...};
+        }
+
+        is_detected_t<erase_t, map_type, iterator> erase(iterator pos)
+        {
             return _map.erase(pos);
         }
 
@@ -152,8 +191,21 @@ namespace more_maps
             return _map.erase(pos);
         }
 
-        template<typename T>
-        is_detected_t<erase_t, map_type, int> erase() {
+        template <typename T>
+        is_detected_t<erase_t, map_type, int> erase()
+        {
+            return _map.erase(getTypeId<T>());
+        }
+
+        template <typename T, typename = typename std::enable_if_t<std::is_convertible_v<T, V>>>
+        is_detected_t<erase_t, map_type, int> erase(const T &)
+        {
+            return _map.erase(getTypeId<T>());
+        }
+
+        template <typename T, typename = typename std::enable_if_t<std::is_convertible_v<T, V>>>
+        is_detected_t<erase_t, map_type, int> erase(T &&)
+        {
             return _map.erase(getTypeId<T>());
         }
 
@@ -161,7 +213,17 @@ namespace more_maps
         is_detected_t<erase_t, map_type, int> erase()
         {
             int sum = 0;
-            for(size_t v : {_map.erase(getTypeId<TArgs>())...}) sum+= v;
+            for (size_t v : {_map.erase(getTypeId<TArgs>())...})
+                sum += v;
+            return sum;
+        }
+
+        template <typename... TArgs, typename = typename std::enable_if_t<(sizeof...(TArgs) > 1) && std::conjunction_v<std::is_convertible<TArgs, V>...>>>
+        is_detected_t<erase_t, map_type, int> erase(TArgs &&...)
+        {
+            int sum = 0;
+            for (size_t v : {_map.erase(getTypeId<TArgs>())...})
+                sum += v;
             return sum;
         }
 
@@ -175,6 +237,9 @@ namespace more_maps
         template <class T>
         V &get() { return _map[getTypeId<T>()]; }
 
+        template <class T>
+        V &get(T &&) { return _map[getTypeId<T>()]; }
+
         /**
          * @brief Returns a reference to the mapped value of the element
          * for a specified type.
@@ -183,7 +248,10 @@ namespace more_maps
          * @return const T&, reference to mapped value
          */
         template <class T>
-        const V &get() const { return static_cast<const V&>(_map[getTypeId<T>()]); }
+        const V &get() const { return static_cast<const V &>(_map[getTypeId<T>()]); }
+
+        template <class T>
+        const V &get(const T &) const { return static_cast<const V &>(_map[getTypeId<T>()]); }
 
     private:
         template <class T>
@@ -201,6 +269,6 @@ namespace more_maps
               template <class...> class Map,
               class... MapArgs>
     std::atomic_int type_map<V, Map, MapArgs...>::_typeId(0);
-}
+} // namespace more_maps
 
 #endif // MORE_MAPS_TYPE_MAP_HPP

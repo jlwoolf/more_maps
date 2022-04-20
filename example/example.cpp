@@ -21,10 +21,12 @@
 // SOFTWARE.
 
 #include <iostream>
-#include <vector>
 #include <map>
+#include <vector>
 
 #include <type_map.hpp>
+#include <cast_map.hpp>
 
-int main() {
+int main()
+{
 }
